@@ -157,13 +157,18 @@ def convert_seconds_to_time(seconds):
     return f"{minutes}:{seconds:02d}"
 
 def load_folder(folder_path=None):
-    global current_folder, songs, song_labels
-    # Get folder path if not provided
-    if folder_path is None:  # Explicit check for None
+    global current_folder, songs, song_labels, current_index, is_playing, paused
+    if folder_path is None:
         folder_path = filedialog.askdirectory()
     
     if not folder_path:
         return
+    
+    # Stop any ongoing playback and reset state
+    stop()
+    current_index = -1
+    is_playing = False
+    paused = False
     
     current_folder = folder_path
     songs.clear()
@@ -183,12 +188,14 @@ def load_folder(folder_path=None):
     song_name_frame.pack(fill="x", pady=0, padx=10)
     main_frame.pack(fill="both", expand=True, padx=10)
     open_folder_btn.place(relx=1.0, rely=0.0, anchor='ne', x=-10, y=10)
+    song_var.set("")  # Clear current song display
 
 def add_song_entry(song_name, index):
     song_label = tk.Label(song_frame, text=song_name, fg="white", bg=song_name_bg_clor,
                           font=("Arial", 13), anchor="w", padx=10)
     song_label.pack(fill="x", pady=(0, 0))
     song_label.bind("<Button-1>", lambda e, i=index: play_song_by_index(i))
+    song_label.bind("<Button-3>", lambda e, i=index: show_context_menu(e, i))
     song_labels.append(song_label)  # Add this line to track labels
 
     separator = tk.Frame(song_frame, height=2, bg="magenta")
@@ -234,8 +241,6 @@ def play_song_by_index(index):
         timeline_canvas.itemconfig(slider_handle, state="hidden")
         total_time_label.config(text=convert_seconds_to_time(total_duration))
         
-        
-        
         pygame.mixer.music.load(full_path)
         pygame.mixer.music.play()
         song_var.set(songs[index])
@@ -243,6 +248,22 @@ def play_song_by_index(index):
         last_update_time = time.time()  # Reset update timer
         base_time = 0  # Reset base time when starting a new song
         
+def show_context_menu(event, index):
+    context_menu = tk.Menu(root, tearoff=0)
+    context_menu.add_command(label="Delete", command=lambda: delete_song(index))
+    context_menu.tk_popup(event.x_root, event.y_root)
+
+# Add the delete_song function
+def delete_song(index):
+    if 0 <= index < len(songs):
+        song_name = songs[index]
+        file_path = os.path.join(current_folder, song_name)
+        try:
+            os.remove(file_path)
+            # Reload the folder to refresh the UI
+            load_folder(current_folder)
+        except Exception as e:
+            tk.messagebox.showerror("Error", f"Could not delete song: {e}")
 
 def check_song_end():
     global is_playing, pause_after_current
