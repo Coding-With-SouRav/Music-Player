@@ -20,6 +20,7 @@ This code is a **Tkinter-based music player** with the following features:
   - Cross-platform config/file paths (Windows/Linux/macOS).
 - **Error Handling**: Graceful fallback for missing icons/resources.
 - **Keyboard Shortcuts**: Space (play/pause), arrows (navigation/skip), etc.
+- **Mouse Click**: Right click on songs name, a "Delete" popup open to delte the song permanently
 
 ### Code Structure:
 - Uses **OOP-like patterns** with global state management for playback/UI.
