@@ -10,6 +10,7 @@ import time
 import sys
 import ctypes
 from sys import platform
+import random
 
 
 app_name = "MusicPlayer"
@@ -96,6 +97,7 @@ drag_start_x = 0
 pause_after_current  = False
 timer_id = None
 timer_end_time = 0
+shuffle_enabled = False
 is_volume_dragging = False
 last_volume = 1.0
 
@@ -115,6 +117,35 @@ try:
     root.iconbitmap(resource_path(r"icons/icon.ico"))
 except Exception as e:
     print("Icon load error:", e)  # Debugging
+
+
+
+class ToolTip:
+    def __init__(self, widget, text):
+        # self.editor = editor
+        self.widget = widget
+        self.text = text
+        self.tipwindow = None
+        self.widget.bind("<Enter>", self.showtip)
+        self.widget.bind("<Leave>", self.hidetip)
+
+    def showtip(self, event=None):
+        if self.tipwindow:
+            return
+        # Calculate position relative to the main window
+        x = self.widget.winfo_rootx() + 25
+        y = self.widget.winfo_rooty() + 25
+        self.tipwindow = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)  # Remove window decorations
+        tw.wm_geometry(f"+{x}+{y}")
+        self.ToolTip_label = tk.Label(tw, text=self.text, bg='blue', fg="cyan", font=("Consolas", 13, "italic","bold"))
+        self.ToolTip_label.pack()
+
+    def hidetip(self, event=None):
+        if self.tipwindow:
+            self.tipwindow.destroy()
+        self.tipwindow = None
+
 
 def load_window_geometry():
     global current_folder
@@ -217,6 +248,7 @@ def play_song_by_index(index):
         skip_back_btn.place(relx=0.35, rely=0.5, anchor="center") 
         skip_forward_btn.place(relx=0.65, rely=0.5, anchor="center")
         night_btn.place(relx=0.75, rely=0.5, anchor="center")
+        suffle_btn.place(relx=0.29, rely=0.5, anchor="center")
 
         if current_index == 0:
             prev_btn.place_forget()
@@ -250,7 +282,7 @@ def play_song_by_index(index):
         
 def show_context_menu(event, index):
     context_menu = tk.Menu(root, tearoff=0)
-    context_menu.add_command(label="Delete", command=lambda: delete_song(index))
+    context_menu.add_command(label="Delete",background=bg_color,foreground="white",font=('Arial',10), command=lambda: delete_song(index))
     context_menu.tk_popup(event.x_root, event.y_root)
 
 # Add the delete_song function
@@ -329,11 +361,18 @@ def on_release(event):
     seek()
 
 def play_next_song(event=None):
-    if not is_playing:  # Add this check
-        return
     global current_index
-    next_index = current_index + 1
-    if next_index < len(songs):
+    if not is_playing or not songs:
+        return
+
+    if shuffle_enabled:
+        next_index = random.randint(0, len(songs)-1)
+    else:
+        next_index = current_index + 1
+        if next_index >= len(songs):
+            return  # End of list (or loop by setting next_index=0)
+
+    if 0 <= next_index < len(songs):
         play_song_by_index(next_index)
 
 def pause_unpause(event = None):
@@ -555,6 +594,17 @@ def mute_unmute():
         mute_btn.pack_forget()
         unmute_btn.pack(side=tk.LEFT, padx=(0, 2))
 
+def shuffle():
+    global shuffle_enabled
+    shuffle_enabled = not shuffle_enabled
+    suffle_btn.config(bg="blue" if shuffle_enabled else bg_color)
+
+
+
+
+
+
+
 
 
 
@@ -644,6 +694,9 @@ mute_icon = ImageTk.PhotoImage(mute_img)
 
 unmute_img = Image.open(resource_path(r"icons\unmute.png")).resize((20, 20))
 unmute_icon = ImageTk.PhotoImage(unmute_img)
+
+suffle_img = Image.open(resource_path(r"icons\suffle.png")).resize((35, 35))
+suffle_icon = ImageTk.PhotoImage(suffle_img)
 
 
 
@@ -761,6 +814,7 @@ night_btn = tk.Button(controls, image=night_mode_icon, font=("Arial", 14),
                      command=show_night_options,
                      activebackground=bg_color)
 
+ToolTip(night_btn, "Night Mode")
 
 # Night Mode Menu
 night_menu = tk.Menu(root, tearoff=0)
@@ -784,7 +838,7 @@ timer_label.place(relx=0.85, rely=0.5, anchor="center")
 
 
 volume_frame = tk.Frame(controls, width=140, height=30, bg=bg_color)
-volume_frame.place(relx=0.18, rely=0.5, anchor="center")
+volume_frame.place(relx=0.15, rely=0.5, anchor="center")
 
 volume_slider_canvas = tk.Canvas(volume_frame, width=140, height=30, bg=bg_color
                                  , highlightthickness=0)
@@ -805,7 +859,6 @@ mute_btn = tk.Button(volume_frame, image=mute_icon, font=("Arial", 14),
                      bg=bg_color, fg="white", border=0,
                      command=mute_unmute,
                      activebackground=bg_color)
-# mute_btn.pack(side=tk.LEFT, padx=(0, 2))
 
 unmute_btn = tk.Button(volume_frame, image=unmute_icon, font=("Arial", 14), 
                      bg=bg_color, fg="white", border=0,
@@ -813,7 +866,18 @@ unmute_btn = tk.Button(volume_frame, image=unmute_icon, font=("Arial", 14),
                      activebackground=bg_color)
 unmute_btn.pack(side=tk.LEFT, padx=(0, 2))
 
+suffle_btn = tk.Button(controls, 
+                        image=suffle_icon,
+                        text="Shuffle",
+                        font=("Arial", 14), 
+                        bg=bg_color, fg="white", border=0,
+                        command=shuffle,
+                        activebackground=bg_color,
+                        borderwidth=0,
+                        highlightthickness=0,
+                        )
 
+ToolTip(suffle_btn, "Shuffle Songs to Play")
 
 root.bind("<Up>", play_previous_song)
 root.bind("<Down>", play_next_song)
