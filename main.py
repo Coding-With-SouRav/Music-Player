@@ -2,8 +2,7 @@ import configparser
 import os
 import sys
 import tkinter as tk
-from tkinter import filedialog
-from tkinter import messagebox
+from tkinter import filedialog, ttk, messagebox
 import pygame
 from PIL import Image, ImageTk
 from mutagen.mp3 import MP3
@@ -13,6 +12,7 @@ import ctypes
 from sys import platform
 import random
 app_name = "MusicPlayer"
+
 if platform == "win32":
     config_dir = os.path.join(os.getenv('APPDATA'), app_name)
 elif platform == "linux" or platform == "linux2":
@@ -30,12 +30,14 @@ def create_gradient_image(width, height, start_color, end_color):
     gradient = Image.new('RGB', (1, height))
     start = hex_to_rgb(start_color)
     end = hex_to_rgb(end_color)
+
     for y in range(height):
         r = start[0] + (end[0] - start[0]) * y // height
         g = start[1] + (end[1] - start[1]) * y // height
         b = start[2] + (end[2] - start[2]) * y // height
         gradient.putpixel((0, y), (r, g, b))
     return gradient.resize((width, height), Image.NEAREST)
+
 if sys.platform == "win32":
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("YourAppID.UniqueName")
 bg_color = "#2100d9"
@@ -51,6 +53,7 @@ background_canvas.place(x=0, y=0, relwidth=1, relheight=1)
 
 def update_gradient(event=None):
     global background_canvas
+
     if not background_canvas or not background_canvas.winfo_exists():
         return
     width = root.winfo_width()
@@ -82,23 +85,30 @@ timer_end_time = 0
 shuffle_enabled = False
 is_volume_dragging = False
 last_volume = 1.0
+last_highlighted_index = -1
 shuffled_songs = []
 played_indices = set()
 
 def resource_path(relative_path):
     """ Get absolute path to resources for both dev and PyInstaller """
+
     try:
         base_path = sys._MEIPASS
+
     except Exception:
         base_path = os.path.abspath(".")
     full_path = os.path.join(base_path, relative_path)
+
     if not os.path.exists(full_path):
         raise FileNotFoundError(f"Resource not found: {full_path}")
     return full_path
+
 try:
     root.iconbitmap(resource_path(r"icons/icon.ico"))
+
 except Exception as e:
     print("Icon load error:", e)
+
 class ToolTip:
 
     def __init__(self, widget, text):
@@ -109,6 +119,7 @@ class ToolTip:
         self.widget.bind("<Leave>", self.hidetip)
 
     def showtip(self, event=None):
+
         if self.tipwindow:
             return
         x = self.widget.winfo_rootx() + 25
@@ -120,22 +131,28 @@ class ToolTip:
         self.ToolTip_label.pack()
 
     def hidetip(self, event=None):
+
         if self.tipwindow:
             self.tipwindow.destroy()
         self.tipwindow = None
 
 def load_window_geometry():
     global current_folder
+
     if os.path.exists(config_file):
         config = configparser.ConfigParser()
         config.read(config_file)
+
         if "Geometry" in config:
             geometry = config["Geometry"].get("size", "")
             state = config["Geometry"].get("state", "normal")
+
             if geometry:
                 root.geometry(geometry)
+
         if "Preferences" in config:
             current_folder = config["Preferences"].get("last_folder", "")
+
     if current_folder and os.path.isdir(current_folder):
         root.after(500, lambda: load_folder(current_folder))
 
@@ -146,8 +163,10 @@ def save_window_geometry():
         "state": root.state()
     }
     config["Preferences"] = {}
+
     if os.path.isdir(current_folder):
         config["Preferences"]["last_folder"] = current_folder
+
     with open(config_file, "w") as f:
         config.write(f)
 
@@ -163,23 +182,30 @@ def convert_seconds_to_time(seconds):
     return f"{minutes}:{seconds:02d}"
 
 def load_folder(folder_path=None):
-    global current_folder, songs, song_labels, current_index, is_playing, paused
+    global current_folder, songs,last_highlighted_index, song_labels, current_index, is_playing, paused
+
     if folder_path is None:
         folder_path = filedialog.askdirectory()
+
     if not folder_path:
         return
     stop()
     current_index = -1
+    last_highlighted_index = -1
     is_playing = False
     paused = False
     current_folder = folder_path
     songs.clear()
     song_labels.clear()
+
     for widget in song_frame.winfo_children():
         widget.destroy()
+
     for file in os.listdir(current_folder):
+
         if file.endswith(".mp3"):
             songs.append(file)
+
     for i, song in enumerate(songs):
         add_song_entry(song, i)
     folder_frame.place_forget()
@@ -187,24 +213,87 @@ def load_folder(folder_path=None):
     main_frame.pack(fill="both", expand=True, padx=30)
     open_folder_btn.place(relx=1.0, rely=0.0, anchor='ne', x=-10, y=10)
     song_var.set("")
+    update_window_title()
 
 def add_song_entry(song_name, index):
-    song_label = tk.Label(song_frame, text=song_name, fg="white", bg=song_name_bg_clor,
-                          font=("Arial", 13), anchor="w", padx=10)
-    song_label.pack(fill="x", pady=(0, 0))
-    song_label.bind("<Button-1>", lambda e, i=index: play_song_by_index(i))
-    song_label.bind("<Button-3>", lambda e, i=index: show_context_menu(e, i))
-    song_labels.append(song_label)
+    song_entry_frame = tk.Frame(song_frame, bg=bg_color)
+    song_entry_frame.pack(fill="x", pady=(0, 0))
+    full_path = os.path.join(current_folder, song_name)
+
+    try:
+        audio = MP3(full_path)
+        duration = audio.info.length
+        duration_str = convert_seconds_to_time(duration)
+
+    except:
+        duration_str = "0:00"
+    duration_label = tk.Label(
+        song_entry_frame,
+        text=duration_str,
+        fg="white",
+        bg=song_name_bg_clor,
+        font=("Arial", 13),
+        width=6,
+        anchor="e",
+        padx=5
+    )
+    duration_label.pack(side="left")
+    song_label = tk.Label(
+        song_entry_frame,
+        text=song_name,
+        fg="white",
+        bg=song_name_bg_clor,
+        font=("Arial", 13),
+        anchor="w",
+        padx=10
+    )
+    song_label.pack(side="left", fill="x", expand=True)
+    separator = tk.Frame(song_entry_frame, height=2, bg="magenta")
+    separator.pack(fill="x", pady=(0, 6), side=tk.BOTTOM)
+    song_entry_frame.index = index
+    duration_label.index = index
+    song_label.index = index
+
+    for widget in [song_entry_frame, duration_label, song_label]:
+        widget.bind("<Button-1>", play_song_by_event)
+        widget.bind("<Button-3>", show_context_menu_event)
+    song_labels.append(song_entry_frame)
     separator = tk.Frame(song_frame, height=2, bg="magenta")
     separator.pack(fill="x", pady=(0, 6))
 
+def play_song_by_event(event):
+    index = event.widget.index
+    play_song_by_index(index)
+
+def show_context_menu_event(event):
+    index = event.widget.index
+    show_context_menu(event, index)
+
 def play_song_by_index(index):
-    global paused, current_index, total_duration, last_update_time,is_playing, base_time
+    global paused, current_index, total_duration, last_update_time, is_playing, base_time, last_highlighted_index
+
     if 0 <= index < len(songs):
-        for i, label in enumerate(song_labels):
-            label.config(bg="#ee15ff" if i == index else song_name_bg_clor)
-            label.config(fg = 'black' if i == index else 'white')
-            label.config(font = ("Arial", 15, 'italic') if i == index else ("Arial", 13))
+
+        if last_highlighted_index != -1 and last_highlighted_index < len(song_labels):
+            prev_frame = song_labels[last_highlighted_index]
+
+            for child in prev_frame.winfo_children():
+
+                if isinstance(child, tk.Label):
+                    child.config(bg=song_name_bg_clor, fg='white')
+
+            if len(prev_frame.winfo_children()) > 1 and isinstance(prev_frame.winfo_children()[1], tk.Label):
+                prev_frame.winfo_children()[1].config(font=("Arial", 13))
+        current_frame = song_labels[index]
+
+        for child in current_frame.winfo_children():
+
+            if isinstance(child, tk.Label):
+                child.config(bg="#ee15ff", fg='black')
+
+        if len(current_frame.winfo_children()) > 1 and isinstance(current_frame.winfo_children()[1], tk.Label):
+            current_frame.winfo_children()[1].config(font=("Arial", 15, 'italic'))
+        last_highlighted_index = index
         is_playing = True
         paused = False
         current_index = index
@@ -214,12 +303,14 @@ def play_song_by_index(index):
         skip_forward_btn.place(relx=0.65, rely=0.5, anchor="center")
         night_btn.place(relx=0.75, rely=0.5, anchor="center")
         suffle_btn.place(relx=0.29, rely=0.5, anchor="center")
+
         if current_index == 0:
             prev_btn.place_forget()
             fade_prev_btn.place(relx=0.43, rely=0.5, anchor="center")
         else:
             fade_prev_btn.place_forget()
             prev_btn.place(relx=0.43, rely=0.5, anchor="center")
+
         if current_index == len(songs) - 1:
             next_btn.place_forget()
             fade_next_btn.place(relx=0.57, rely=0.5, anchor="center")
@@ -227,17 +318,24 @@ def play_song_by_index(index):
             fade_next_btn.place_forget()
             next_btn.place(relx=0.57, rely=0.5, anchor="center")
         full_path = os.path.join(current_folder, songs[index])
-        audio = MP3(full_path)
-        total_duration = audio.info.length
+
+        try:
+            audio = MP3(full_path)
+            total_duration = audio.info.length
+
+        except:
+            total_duration = 0
         timeline_canvas.coords(progress_line, 10, 10, 10, 10)
         timeline_canvas.itemconfig(slider_handle, state="hidden")
         total_time_label.config(text=convert_seconds_to_time(total_duration))
         pygame.mixer.music.load(full_path)
         pygame.mixer.music.play()
         song_var.set(songs[index])
-        canvas.yview_moveto(index / len(songs))
+        canvas.yview_moveto(index / max(1, len(songs)))
         last_update_time = time.time()
         base_time = 0
+        update_window_title()
+        root.update_idletasks()
 
 def show_context_menu(event, index):
     context_menu = tk.Menu(root, tearoff=0)
@@ -245,7 +343,8 @@ def show_context_menu(event, index):
     context_menu.tk_popup(event.x_root, event.y_root)
 
 def delete_song(index):
-    global current_index, is_playing
+    global current_index, is_playing,last_highlighted_index, songs, song_labels
+
     if 0 <= index < len(songs):
         song_name = songs[index]
         file_path = os.path.join(current_folder, song_name)
@@ -254,23 +353,63 @@ def delete_song(index):
             f"Are you sure you want to delete '{song_name}'?",
             parent=root
         )
+
         if not confirm:
             return
+
         try:
+
             if index == current_index:
                 stop()
                 pygame.mixer.music.unload()
                 is_playing = False
+                song_var.set("")
             os.remove(file_path)
-            load_folder(current_folder)
+            del songs[index]
+            frame_to_remove = song_labels[index]
+            separator = frame_to_remove.winfo_children()[-1]
+            frame_to_remove.destroy()
+            separator.destroy()
+            del song_labels[index]
+
+            if last_highlighted_index == index:
+                last_highlighted_index = -1
+            elif last_highlighted_index > index:
+                last_highlighted_index -= 1
+
+            for i in range(index, len(song_labels)):
+                frame = song_labels[i]
+                frame.index = i
+
+                for child in frame.winfo_children():
+
+                    if hasattr(child, 'index'):
+                        child.index = i
+
+            if current_index == -1:
+                play_btn.place(relx=0.5, rely=0.5, anchor="center")
+                pause_btn.place_forget()
+                skip_back_btn.place_forget()
+                skip_forward_btn.place_forget()
+                night_btn.place_forget()
+                suffle_btn.place_forget()
+                prev_btn.place_forget()
+                next_btn.place_forget()
+                fade_prev_btn.place_forget()
+                fade_next_btn.place_forget()
+            update_window_title()
+
             if shuffle_enabled:
                 shuffle()
+
         except Exception as e:
             messagebox.showerror("Error", f"Could not delete song: {e}")
 
 def check_song_end():
     global is_playing, pause_after_current
+
     if is_playing and not pygame.mixer.music.get_busy() and not paused:
+
         if pause_after_current:
             pause_after_timer()
             pause_after_current = False
@@ -279,7 +418,12 @@ def check_song_end():
     root.after(1000, check_song_end)
 
 def update_time_slider():
-    global last_seek_time, base_time
+    global last_seek_time, base_time, is_seeking, is_playing
+
+    if is_seeking or not is_playing:
+        root.after(1000, update_time_slider)
+        return
+
     if not is_seeking and pygame.mixer.music.get_busy() and not paused:
         current_pos = pygame.mixer.music.get_pos() / 1000
         current_time = base_time + current_pos
@@ -294,6 +438,7 @@ def start_seek(event):
     seek_start_time = time.time()
     slider = event.widget
     trough_width = slider.winfo_width()
+
     if trough_width == 0:
         return
     click_x = event.x
@@ -305,11 +450,13 @@ def start_seek(event):
 
 def seek(event=None):
     global last_seek_time, base_time, paused, is_playing
+
     if not is_playing or not songs:
         return
     pygame.mixer.music.stop()
     pygame.mixer.music.load(os.path.join(current_folder, songs[current_index]))
     pygame.mixer.music.play(start=current_time)
+
     if paused:
         pygame.mixer.music.pause()
     base_time = current_time
@@ -322,21 +469,27 @@ def on_release(event):
 
 def play_next_song(event=None):
     global current_index
+
     if not is_playing or not songs:
         return
+
     if shuffle_enabled:
         next_index = get_next_shuffle_index()
     else:
         next_index = current_index + 1
+
         if next_index >= len(songs):
             return
+
     if next_index is not None and 0 <= next_index < len(songs):
         play_song_by_index(next_index)
 
 def pause_unpause(event = None):
     global paused
+
     if not is_playing:
         return
+
     if paused:
         pygame.mixer.music.unpause()
         paused = False
@@ -356,6 +509,7 @@ def stop():
     is_playing = False
 
 def on_mousewheel(event):
+
     if event.state & 0x0001:
         canvas.xview_scroll(-1 * (event.delta // 120), "units")
     else:
@@ -365,9 +519,11 @@ def resize_song_label(event):
     song_label.config(wraplength=event.width - 100)
 
 def play_previous_song(event=None):
+
     if not is_playing:
         return
     global current_index
+
     if current_index > 0:
         play_song_by_index(current_index - 1)
 
@@ -375,9 +531,11 @@ def update_slider_position(time_pos):
     """Update slider position and progress line based on time"""
     global current_time
     current_time = max(0, min(time_pos, total_duration))
+
     if total_duration == 0:
         return
     canvas_width = timeline_canvas.winfo_width()
+
     if canvas_width < 20:
         return
     x_pos = 10 + (current_time / total_duration) * (canvas_width - 20)
@@ -392,6 +550,7 @@ def start_drag(event):
     is_dragging = True
     drag_start_x = event.x
     canvas_width = timeline_canvas.winfo_width()
+
     if canvas_width > 20:
         proportion = (event.x - 10) / (canvas_width - 20)
         proportion = max(0.0, min(proportion, 1.0))
@@ -399,8 +558,10 @@ def start_drag(event):
         update_slider_position(desired_value)
 
 def during_drag(event):
+
     if is_dragging:
         canvas_width = timeline_canvas.winfo_width()
+
         if canvas_width > 20:
             proportion = (event.x - 10) / (canvas_width - 20)
             proportion = max(0.0, min(proportion, 1.0))
@@ -417,14 +578,17 @@ def on_timeline_configure(event):
     timeline_canvas.coords(timeline_line, 10, 10, canvas_width-10, 10)
     current_time_label.place(x=30, y=15)
     total_time_label.place(relx=1.0, x=-30, y=15, anchor='ne')
+
     if is_playing:
         update_slider_position(current_time)
 
 def skip_forward(event = None):
     global current_time, base_time, is_playing
+
     if not is_playing or not songs:
         return
     new_time = current_time + 10
+
     if new_time > total_duration:
         new_time = total_duration
     current_time = new_time
@@ -434,9 +598,11 @@ def skip_forward(event = None):
 
 def skip_backward(event = None):
     global current_time, base_time, is_playing
+
     if not is_playing or not songs:
         return
     new_time = current_time - 10
+
     if new_time < 0:
         new_time = 0
     current_time = new_time
@@ -466,12 +632,14 @@ def pause_after_timer():
     play_btn.place(relx=0.5, rely=0.5, anchor="center")
     timer_label.config(text="")
     timer_end_time = 0
+
     if timer_id:
         root.after_cancel(timer_id)
         timer_id = None
 
 def update_timer_label():
     global timer_end_time
+
     if timer_end_time > time.time():
         remaining = timer_end_time - time.time()
         mins = int(remaining // 60)
@@ -484,6 +652,7 @@ def update_timer_label():
 
 def set_timer(minutes):
     global timer_id, timer_end_time
+
     if timer_id:
         root.after_cancel(timer_id)
     timer_id = root.after(minutes * 60000, pause_after_timer)
@@ -497,6 +666,7 @@ def start_volume_drag(event):
 
 def during_volume_drag(event):
     global last_volume
+
     if is_volume_dragging:
         x = event.x
         x = max(10, min(x, 90))
@@ -506,6 +676,7 @@ def during_volume_drag(event):
         volume = volume_percent / 100
         pygame.mixer.music.set_volume(volume)
         volume_slider_canvas.itemconfig(volume_percent_text, text=f"{volume_percent}%")
+
         if volume == 0:
             unmute_btn.pack_forget()
             mute_btn.pack(side=tk.LEFT, padx=(0, 2))
@@ -521,6 +692,7 @@ def end_volume_drag(event):
 def mute_unmute():
     global last_volume
     current_volume = pygame.mixer.music.get_volume()
+
     if current_volume > 0:
         last_volume = current_volume
         pygame.mixer.music.set_volume(0)
@@ -545,6 +717,7 @@ def shuffle():
     global shuffle_enabled, shuffled_songs, played_indices
     shuffle_enabled = not shuffle_enabled
     suffle_btn.config(bg="blue" if shuffle_enabled else bg_color)
+
     if shuffle_enabled:
         shuffled_songs = songs.copy()
         random.shuffle(shuffled_songs)
@@ -552,17 +725,28 @@ def shuffle():
 
 def get_next_shuffle_index():
     global shuffled_songs, played_indices
+
     if not shuffled_songs:
         shuffled_songs = songs.copy()
         random.shuffle(shuffled_songs)
         played_indices.clear()
+
     while shuffled_songs:
         next_song = shuffled_songs.pop(0)
         next_index = songs.index(next_song)
+
         if next_index not in played_indices:
             played_indices.add(next_index)
             return next_index
     return None
+
+def update_window_title():
+    """Update window title with current song position"""
+
+    if songs and current_index >= 0 and current_index < len(songs):
+        root.title(f"Music Player - {current_index+1}/{len(songs)}")
+    else:
+        root.title("Music Player")
 song_name_frame = tk.Frame(root, bg=bg_color, height=100)
 song_name_frame.bind("<Configure>", resize_song_label)
 song_var = tk.StringVar()
@@ -571,8 +755,27 @@ song_label.pack(expand=True, pady=5)
 main_frame = tk.Frame(root, background=bg_color)
 canvas_frame = tk.Frame(main_frame)
 canvas_frame.pack(fill="both", expand=True, padx=10, pady=10)
+style = ttk.Style()
+style.theme_use('clam')
+style.configure(
+    "Vertical.TScrollbar",
+    gripcount=0,
+    background='#0d02d5', # blue
+    darkcolor='#00ffff',
+    lightcolor='#00ffff',
+    troughcolor='#00ffff', # black
+    bordercolor='#00ffff', # black
+    arrowcolor='#00ffff', # black
+    relief="flat",
+    width=5
+)
+style.map(
+    "Vertical.TScrollbar",
+    background=[('active', 'magenta')],
+    arrowcolor=[('active', 'blue')]
+)
 canvas = tk.Canvas(canvas_frame, bg=bg_color, highlightthickness=0)
-scrollbar = tk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
+scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", style="Vertical.TScrollbar",  command=canvas.yview)
 canvas.configure(yscrollcommand=scrollbar.set)
 canvas.bind_all("<MouseWheel>", on_mousewheel)
 canvas.bind_all("<Shift-MouseWheel>", on_mousewheel)
@@ -706,6 +909,7 @@ ToolTip(night_btn, "Night Mode")
 night_menu = tk.Menu(root, tearoff=0)
 night_menu.add_command(label="Pause when song ends",background=bg_color,foreground="white",font=('Arial',14), command=toggle_pause_after_current)
 timer_menu = tk.Menu(night_menu, tearoff=0)
+
 for mins in [5, 10, 15, 30, 45, 60, 90, 120]:
     timer_menu.add_command(label=f"{mins} minutes",background=bg_color,foreground="white",font=('Arial',14),
                           command=lambda m=mins: set_timer(m))
